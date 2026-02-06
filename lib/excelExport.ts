@@ -178,3 +178,47 @@ export async function downloadTemplate() {
     await exportToExcel(templateData, columns, "schedule_template.xlsx", "Template");
 }
 
+
+export async function exportScheduleToExcel(programs: any[], filename: string = 'schedule.xlsx') {
+    const columns = [
+        { header: 'Order', key: 'orderIndex', width: 10 },
+        { header: 'Day', key: 'day', width: 10 },
+        { header: 'Start Time', key: 'scheduledStartTime', width: 20 },
+        { header: 'Item Name', key: 'itemName', width: 30 },
+        { header: 'Class', key: 'programClass', width: 15 },
+        { header: 'Division', key: 'division', width: 10 },
+        { header: 'Participants', key: 'participants', width: 40 },
+        { header: 'Duration (min)', key: 'timeNeeded', width: 15 },
+        { header: 'Materials', key: 'materials', width: 15 },
+        { header: 'Dress Status', key: 'dressStatus', width: 15 },
+        { header: 'Remarks', key: 'remarks', width: 30 },
+    ];
+
+    // Format start time if it's a Timestamp
+    const formattedData = programs.map(p => ({
+        ...p,
+        scheduledStartTime: p.scheduledStartTime?.toDate ? p.scheduledStartTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : p.scheduledStartTime,
+        participants: Array.isArray(p.participants) ? p.participants.join(', ') : p.participants
+    }));
+
+    await exportToExcel(formattedData, columns, filename, 'Schedule');
+}
+
+export async function exportSubmissionsToExcel(submissions: any[], filename: string = 'submissions.xlsx') {
+    const columns = [
+        { header: 'Timestamp', key: 'createdAt', width: 25 },
+        { header: 'Team Name', key: 'teamName', width: 20 },
+        { header: 'Program', key: 'itemName', width: 30 },
+        { header: 'Contact', key: 'contactNumber', width: 15 },
+        { header: 'Participants', key: 'participants', width: 40 },
+        { header: 'Status', key: 'status', width: 15 },
+    ];
+
+    const formattedData = submissions.map(s => ({
+        ...s,
+        createdAt: s.createdAt?.toDate ? s.createdAt.toDate().toLocaleString() : s.createdAt,
+        participants: Array.isArray(s.participants) ? s.participants.join(', ') : s.participants
+    }));
+
+    await exportToExcel(formattedData, columns, filename, 'Submissions');
+}
