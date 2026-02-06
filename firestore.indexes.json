@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "programs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "orderIndex",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
