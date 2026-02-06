@@ -17,7 +17,7 @@ export function ScheduleConfigModal({ eventId, currentConfig, onClose, onUpdate 
     const [loading, setLoading] = useState(false);
 
     // Helper to format Timestamp to datetime-local string
-    const formatTimestamp = (ts: Timestamp | undefined) => {
+    const formatTimestamp = (ts: Timestamp | null | undefined) => {
         if (!ts) return "";
         const date = ts.toDate();
         // Adjust to local time string format for input: YYYY-MM-DDTHH:MM
@@ -29,7 +29,7 @@ export function ScheduleConfigModal({ eventId, currentConfig, onClose, onUpdate 
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
-    const formatDateOnly = (ts: Timestamp | undefined) => {
+    const formatDateOnly = (ts: Timestamp | null | undefined) => {
         if (!ts) return "";
         const date = ts.toDate();
         const year = date.getFullYear();
@@ -42,7 +42,7 @@ export function ScheduleConfigModal({ eventId, currentConfig, onClose, onUpdate 
         scheduleDate: formatDateOnly(currentConfig.scheduleDate || currentConfig.startTime),
         startTime: formatTimestamp(currentConfig.startTime),
         endTime: formatTimestamp(currentConfig.endTime),
-        breakDuration: currentConfig.breakDuration || 30,
+        breakDuration: currentConfig.breakDuration || 10,
         breakStartTime: formatTimestamp(currentConfig.breakStartTime)
     });
 
@@ -55,7 +55,7 @@ export function ScheduleConfigModal({ eventId, currentConfig, onClose, onUpdate 
                 startTime: Timestamp.fromDate(new Date(formData.startTime)),
                 endTime: Timestamp.fromDate(new Date(formData.endTime)),
                 breakDuration: Number(formData.breakDuration),
-                breakStartTime: formData.breakStartTime ? Timestamp.fromDate(new Date(formData.breakStartTime)) : undefined,
+                breakStartTime: formData.breakStartTime ? Timestamp.fromDate(new Date(formData.breakStartTime)) : null,
                 maxAdmins: currentConfig.maxAdmins || 5
             };
 

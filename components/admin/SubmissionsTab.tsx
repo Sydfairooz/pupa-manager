@@ -42,7 +42,8 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                 itemName: submission.itemName,
                 participants: submission.participants,
                 timeNeeded: submission.timeNeeded,
-                category: submission.category,
+                programClass: submission.programClass,
+                division: submission.division,
                 remarks: submission.remarks,
                 materials: "Pending", // Default value for new program
                 dressStatus: (submission.costumeStatus as any) || "Pending"
@@ -132,14 +133,21 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                                                {s.category}
-                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                                    {String(s.programClass || "")}
+                                                </span>
+                                                {s.division && (
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+                                                        {String(s.division)}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="text-[10px] text-muted-foreground">
-                                                {new Date(s.submittedAt.toMillis()).toLocaleString()}
+                                                {s.submittedAt ? new Date(s.submittedAt.toMillis()).toLocaleString() : ""}
                                             </span>
                                         </div>
-                                        <h4 className="text-lg font-bold group-hover:text-indigo-300 transition-colors">{s.itemName}</h4>
+                                        <h4 className="text-lg font-bold group-hover:text-indigo-300 transition-colors">{String(s.itemName || "")}</h4>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -168,7 +176,7 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-tighter text-white/40 font-bold">Participants</p>
                                                 <p className="text-sm text-white/80 line-clamp-2 leading-relaxed">
-                                                    {s.participants.join(", ")}
+                                                    {Array.isArray(s.participants) ? s.participants.map(p => String(p)).join(", ") : String(s.participants || "")}
                                                 </p>
                                             </div>
                                         </div>
@@ -178,7 +186,7 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-tighter text-white/40 font-bold">Duration</p>
-                                                <p className="text-sm text-white/80">{s.timeNeeded} minutes</p>
+                                                <p className="text-sm text-white/80">{Number(s.timeNeeded || 0)} minutes</p>
                                             </div>
                                         </div>
                                     </div>
@@ -191,8 +199,8 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                                 </div>
                                                 <div className="overflow-hidden">
                                                     <p className="text-[10px] uppercase tracking-tighter text-white/40 font-bold">Contact Info</p>
-                                                    <p className="text-sm text-white/80 truncate">{s.contactEmail || "N/A"}</p>
-                                                    {s.contactPhone && <p className="text-xs text-white/50">{s.contactPhone}</p>}
+                                                    <p className="text-sm text-white/80 truncate">{String(s.contactEmail || "N/A")}</p>
+                                                    {s.contactPhone && <p className="text-xs text-white/50">{String(s.contactPhone)}</p>}
                                                 </div>
                                             </div>
                                         )}
@@ -203,7 +211,7 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] uppercase tracking-tighter text-white/40 font-bold">Remarks</p>
-                                                    <p className="text-sm text-white/60 italic leading-snug">"{s.remarks}"</p>
+                                                    <p className="text-sm text-white/60 italic leading-snug">"{String(s.remarks || "")}"</p>
                                                 </div>
                                             </div>
                                         )}
@@ -227,8 +235,8 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                                         {s.status === 'approved' ? <Check size={16} /> : <X size={16} />}
                                     </div>
                                     <div>
-                                        <p className="text-sm font-medium">{s.itemName}</p>
-                                        <p className="text-xs text-muted-foreground capitalize">{s.status}</p>
+                                        <p className="text-sm font-medium">{String(s.itemName || "")}</p>
+                                        <p className="text-xs text-muted-foreground capitalize">{String(s.status || "")}</p>
                                     </div>
                                 </div>
                                 <span className="text-[10px] text-muted-foreground">

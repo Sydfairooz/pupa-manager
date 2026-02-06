@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { getEventPrograms, addProgram, deleteProgram } from "@/lib/firestore";
 import { Program, MaterialStatus, DressStatus } from "@/types";
 import { Plus, Upload, Trash2, Edit, FileSpreadsheet, Download, Search, Filter, Loader2, Sparkles, User, Clock, CheckCircle2 } from "lucide-react";
-import { exportToExcel, importFromExcel } from "@/lib/excelExport";
+import { exportToExcel, importFromExcel, downloadTemplate } from "@/lib/excelExport";
 import { EditProgramModal } from "./EditProgramModal";
 
 export function CollectionTab({ eventId }: { eventId: string }) {
@@ -13,7 +13,7 @@ export function CollectionTab({ eventId }: { eventId: string }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [isAdding, setIsAdding] = useState(false);
     const [editingProgram, setEditingProgram] = useState<Program | null>(null);
-    const [newItem, setNewItem] = useState({ itemName: "", timeNeeded: 5, participants: "", category: "General" });
+    const [newItem, setNewItem] = useState({ itemName: "", timeNeeded: 5, participants: "", programClass: "", division: "" });
 
     const fetchPrograms = async () => {
         setLoading(true);
@@ -30,18 +30,36 @@ export function CollectionTab({ eventId }: { eventId: string }) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const jsonData = await importFromExcel(file);
+        setLoading(true);
+        try {
+            const data = await importFromExcel(file);
 
-        for (const row of jsonData) {
-            await addProgram(eventId, {
-                itemName: row["Item Name"] || row["itemName"] || "Untitled",
-                timeNeeded: Number(row["Time Needed"] || row["Duration (mins)"] || row["timeNeeded"] || 5),
-                participants: (row["Participants"] || row["Participant Names"] || "").split(",").map((s: string) => s.trim()),
-                materials: "Pending",
-                dressStatus: "Pending"
-            });
+            if (data.length === 0) {
+                alert("No valid items found. Please ensure your Excel has an 'Item Name' or 'Program' column.");
+                return;
+            }
+
+            let addedCount = 0;
+            for (const item of data) {
+                await addProgram(eventId, {
+                    ...item,
+                    materials: "Pending",
+                    dressStatus: "Pending"
+                });
+                addedCount++;
+            }
+
+            if (addedCount > 0) {
+                await fetchPrograms();
+                alert(`Successfully imported ${addedCount} items.`);
+            }
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || "Failed to import. Check file format.");
+        } finally {
+            setLoading(false);
+            if (e.target) e.target.value = "";
         }
-        fetchPrograms();
     };
 
     const handleAddStart = async () => {
@@ -49,44 +67,23 @@ export function CollectionTab({ eventId }: { eventId: string }) {
         await addProgram(eventId, {
             itemName: newItem.itemName,
             timeNeeded: Number(newItem.timeNeeded),
-            category: newItem.category,
+            programClass: newItem.programClass,
+            division: newItem.division,
             participants: newItem.participants.split(",").map(s => s.trim()),
             materials: "Pending",
             dressStatus: "Pending"
         });
         setIsAdding(false);
-        setNewItem({ itemName: "", timeNeeded: 5, participants: "", category: "General" });
+        setNewItem({ itemName: "", timeNeeded: 5, participants: "", programClass: "", division: "" });
         fetchPrograms();
     };
 
-    const handleExportCollection = async () => {
-        const exportData = programs.map(p => ({
-            "Item Name": p.itemName,
-            "Participants": p.participants.join(", "),
-            "Duration (mins)": p.timeNeeded,
-            "Category": p.category,
-            "Materials": p.materials,
-            "Dress Status": p.dressStatus,
-            "Remarks": p.remarks
-        }));
-
-        const columns = [
-            { header: "Item Name", key: "Item Name", width: 30 },
-            { header: "Participants", key: "Participants", width: 40 },
-            { header: "Duration (mins)", key: "Duration (mins)", width: 15 },
-            { header: "Category", key: "Category", width: 15 },
-            { header: "Materials", key: "Materials", width: 15 },
-            { header: "Dress Status", key: "Dress Status", width: 15 },
-            { header: "Remarks", key: "Remarks", width: 30 }
-        ];
-
-        await exportToExcel(exportData, columns, `${eventId}_Collection.xlsx`, "Collection");
-    };
-
-    const filteredPrograms = programs.filter(p =>
-        p.itemName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.participants.some(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const filteredPrograms = programs.filter(p => {
+        const itemName = String(p.itemName || "").toLowerCase();
+        const search = searchQuery.toLowerCase();
+        return itemName.includes(search) ||
+            p.participants.some(name => String(name || "").toLowerCase().includes(search));
+    });
 
     const getStatusStyle = (status: string) => {
         switch (status) {
@@ -111,18 +108,18 @@ export function CollectionTab({ eventId }: { eventId: string }) {
                     />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
-                    <button
-                        onClick={handleExportCollection}
-                        className="flex items-center gap-2 px-5 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all font-medium"
-                    >
-                        <Download size={18} className="text-indigo-400" />
-                        <span className="whitespace-nowrap">Export</span>
-                    </button>
                     <label className="flex items-center gap-2 px-5 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all font-medium cursor-pointer">
                         <FileSpreadsheet size={18} className="text-emerald-400" />
                         <span className="whitespace-nowrap">Import Excel</span>
                         <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileUpload} />
                     </label>
+                    <button
+                        onClick={() => downloadTemplate()}
+                        className="flex items-center gap-2 px-5 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all font-medium whitespace-nowrap"
+                    >
+                        <Download size={18} className="text-indigo-400" />
+                        <span>Sample</span>
+                    </button>
                     <button
                         onClick={() => setIsAdding(!isAdding)}
                         className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl transition-all shadow-lg shadow-indigo-600/20 font-bold"
@@ -158,6 +155,24 @@ export function CollectionTab({ eventId }: { eventId: string }) {
                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50"
                                 value={newItem.participants}
                                 onChange={e => setNewItem({ ...newItem, participants: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-bold tracking-widest text-white/30 ml-1">Class</label>
+                            <input
+                                placeholder="e.g. 10th"
+                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50"
+                                value={newItem.programClass}
+                                onChange={e => setNewItem({ ...newItem, programClass: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-bold tracking-widest text-white/30 ml-1">Div</label>
+                            <input
+                                placeholder="e.g. A"
+                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50"
+                                value={newItem.division}
+                                onChange={e => setNewItem({ ...newItem, division: e.target.value })}
                             />
                         </div>
                         <div className="space-y-1.5">
@@ -201,19 +216,26 @@ export function CollectionTab({ eventId }: { eventId: string }) {
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-3">
-                                            <h4 className="text-lg font-bold text-white/90 group-hover:text-indigo-300 transition-colors">{p.itemName}</h4>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-white/10 text-white/50 border border-white/5">
-                                                {p.category || "General"}
-                                            </span>
+                                            <h4 className="text-lg font-bold text-white/90 group-hover:text-indigo-300 transition-colors">{String(p.itemName || "")}</h4>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                                    {String(p.programClass || "General")}
+                                                </span>
+                                                {p.division && (
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+                                                        {String(p.division)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4">
                                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                                 <User size={13} className="text-indigo-400/60" />
-                                                <span className="max-w-[200px] truncate">{p.participants.join(", ")}</span>
+                                                <span className="max-w-[200px] truncate">{Array.isArray(p.participants) ? p.participants.map(name => String(name)).join(", ") : String(p.participants || "")}</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                                 <Clock size={13} className="text-emerald-400/60" />
-                                                <span>{p.timeNeeded} mins</span>
+                                                <span>{Number(p.timeNeeded || 0)} mins</span>
                                             </div>
                                         </div>
                                     </div>
@@ -222,14 +244,14 @@ export function CollectionTab({ eventId }: { eventId: string }) {
                                 <div className="flex flex-wrap items-center gap-4 lg:gap-8">
                                     <div className="flex flex-col gap-1">
                                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Materials</span>
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border text-center ${getStatusStyle(p.materials)}`}>
-                                            {p.materials}
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border text-center ${getStatusStyle(String(p.materials))}`}>
+                                            {String(p.materials || "")}
                                         </span>
                                     </div>
                                     <div className="flex flex-col gap-1">
                                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Dress Status</span>
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border text-center ${getStatusStyle(p.dressStatus)}`}>
-                                            {p.dressStatus}
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border text-center ${getStatusStyle(String(p.dressStatus))}`}>
+                                            {String(p.dressStatus || "")}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2 lg:ml-4">
@@ -247,7 +269,7 @@ export function CollectionTab({ eventId }: { eventId: string }) {
                             {p.remarks && (
                                 <div className="mt-4 pt-4 border-t border-white/5 flex items-start gap-2">
                                     <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-400/60">Note:</div>
-                                    <p className="text-xs text-muted-foreground italic line-clamp-1">"{p.remarks}"</p>
+                                    <p className="text-xs text-muted-foreground italic line-clamp-1">"{String(p.remarks || "")}"</p>
                                 </div>
                             )}
                         </div>

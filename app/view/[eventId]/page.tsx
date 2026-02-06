@@ -99,48 +99,75 @@ export default function StaffViewPage() {
                             <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
                             On Stage Now
                         </div>
-                        <h2 className="text-3xl font-bold text-white mb-2">{currentProgram.itemName}</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">{String(currentProgram.itemName || "")}</h2>
                         <div className="flex items-center gap-4 text-indigo-200 text-sm">
-                            <span className="bg-white/10 px-2 py-1 rounded">{currentProgram.category}</span>
-                            <span className="flex items-center gap-1"><Clock size={14} /> {currentProgram.timeNeeded}m</span>
+                            <span className="bg-white/10 px-2.5 py-1 rounded-lg border border-white/10 font-bold">
+                                {String(currentProgram.programClass || "General")}
+                                {currentProgram.division && ` - ${currentProgram.division}`}
+                            </span>
+                            <span className="flex items-center gap-1"><Clock size={14} /> {Number(currentProgram.timeNeeded || 0)}m</span>
                         </div>
                     </div>
                 )}
 
-                {/* Full Schedule List */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Full Schedule</h3>
-                    <div className="space-y-2">
-                        {programs.map((p, idx) => {
-                            const isCompleted = p.status === "Completed";
-                            const isLive = p.programId === currentProgram?.programId;
+                {/* Full Schedule List Grouped by Day */}
+                <div className="space-y-8">
+                    {[1, 2, 3].map((day) => {
+                        const dayPrograms = programs.filter(p => p.day === day);
+                        if (dayPrograms.length === 0 && day > 1) return null;
 
-                            return (
-                                <div
-                                    key={p.programId}
-                                    className={`p-4 rounded-xl border flex items-center gap-4 transition-all ${isLive ? "bg-indigo-500/10 border-indigo-500/50" :
-                                        isCompleted ? "bg-white/5 border-transparent opacity-50" : "bg-card border-white/5"
-                                        }`}
-                                >
-                                    <div className="text-xs font-mono text-muted-foreground w-12">{format(p.scheduledStartTime.toMillis(), "HH:mm")}</div>
-                                    <div className="flex-1">
-                                        <div className={`font-medium ${isCompleted ? "line-through text-muted-foreground" : "text-white"}`}>
-                                            {p.itemName}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">{p.participants.join(", ")}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className={`text-xs px-2 py-1 rounded ${isLive ? "bg-indigo-500 text-white" :
-                                            isCompleted ? "bg-emerald-500/20 text-emerald-500" :
-                                                "bg-white/10 text-muted-foreground"
-                                            }`}>
-                                            {p.status}
-                                        </span>
-                                    </div>
+                        return (
+                            <div key={day} className="space-y-4">
+                                <h3 className="font-black text-muted-foreground uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
+                                    <div className="h-px flex-1 bg-white/5" />
+                                    Day {day} Schedule
+                                    <div className="h-px flex-1 bg-white/5" />
+                                </h3>
+
+                                <div className="space-y-2">
+                                    {dayPrograms.map((p) => {
+                                        const isCompleted = p.status === "Completed";
+                                        const isLive = p.status === "Live";
+                                        const isNext = p.programId === currentProgram?.programId && !isLive;
+
+                                        return (
+                                            <div
+                                                key={p.programId}
+                                                className={`p-4 rounded-2xl border flex items-center gap-4 transition-all duration-500 ${isLive ? "bg-indigo-500/10 border-indigo-500/50 shadow-lg shadow-indigo-500/5" :
+                                                    isNext ? "bg-white/10 border-white/20" :
+                                                        isCompleted ? "bg-white/5 border-transparent opacity-40" : "bg-card border-white/5"
+                                                    }`}
+                                            >
+                                                <div className="flex flex-col items-center justify-center min-w-[50px]">
+                                                    <div className="text-xs font-mono font-bold text-white/80">{format(p.scheduledStartTime.toMillis(), "HH:mm")}</div>
+                                                    <div className="text-[8px] font-bold text-white/20 uppercase">{format(p.scheduledStartTime.toMillis(), "a")}</div>
+                                                </div>
+
+                                                <div className="flex-1 min-w-0">
+                                                    <div className={`font-bold truncate ${isCompleted ? "line-through text-muted-foreground/60" : "text-white"}`}>
+                                                        {String(p.itemName || "")}
+                                                    </div>
+                                                    <div className="text-[10px] text-muted-foreground truncate font-medium">
+                                                        {Array.isArray(p.participants) ? p.participants.map(n => String(n)).join(" • ") : String(p.participants || "")}
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-right shrink-0">
+                                                    <span className={`text-[10px] font-black uppercase tracking-tighter px-2.5 py-1 rounded-lg border ${isLive ? "bg-indigo-500 text-white border-indigo-400 animate-pulse" :
+                                                        isNext ? "bg-amber-500/20 text-amber-400 border-amber-500/20" :
+                                                            isCompleted ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/10" :
+                                                                "bg-white/5 text-white/20 border-white/5"
+                                                        }`}>
+                                                        {isLive ? "LIVE NOW" : isNext ? "UP NEXT" : isCompleted ? "DONE" : "PENDING"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
-                    </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </main>
         </div>

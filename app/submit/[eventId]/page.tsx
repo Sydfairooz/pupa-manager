@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getEvent, submitProgram } from "@/lib/firestore";
 import { Event } from "@/types";
-import { Loader2, CheckCircle2, Plus, Minus, Send, Sparkles, Clock, Shirt, User, Music } from "lucide-react";
+import { Loader2, CheckCircle2, Plus, Minus, Send, Sparkles, Clock, Shirt, User, Music, Tag } from "lucide-react";
 
 export default function PublicSubmissionPage() {
     const { eventId } = useParams() as { eventId: string };
@@ -18,7 +18,8 @@ export default function PublicSubmissionPage() {
         participants: [""],
         timeNeeded: 5,
         costumeStatus: "In-progress",
-        category: "Dance",
+        programClass: "",
+        division: "",
         remarks: ""
     });
 
@@ -236,18 +237,39 @@ export default function PublicSubmissionPage() {
                         </div>
                     </div>
 
-                    {/* Category (Hidden but defaulted) */}
-                    <div className="grid grid-cols-3 gap-3">
-                        {['Dance', 'Music', 'Drama', 'Speach', 'Other'].map(cat => (
-                            <button
-                                key={cat}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, category: cat })}
-                                className={`py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${formData.category === cat ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-white/5 border-white/5 text-white/20 hover:bg-white/10'}`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
+                    {/* Class and Division */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 ml-1">
+                                <div className="p-2 bg-purple-500/10 rounded-xl text-purple-400">
+                                    <Sparkles size={18} />
+                                </div>
+                                <label className="text-lg font-bold tracking-tight">Class / Grade</label>
+                            </div>
+                            <input
+                                required
+                                type="text"
+                                placeholder="e.g., 10th Standard"
+                                className="w-full bg-white/[0.03] border border-white/5 focus:border-indigo-500/50 rounded-3xl p-5 outline-none transition-all font-medium"
+                                value={formData.programClass}
+                                onChange={e => setFormData({ ...formData, programClass: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 ml-1">
+                                <div className="p-2 bg-pink-500/10 rounded-xl text-pink-400">
+                                    <Tag size={18} />
+                                </div>
+                                <label className="text-lg font-bold tracking-tight">Division / Section</label>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="e.g., A"
+                                className="w-full bg-white/[0.03] border border-white/5 focus:border-indigo-500/50 rounded-3xl p-5 outline-none transition-all font-medium"
+                                value={formData.division}
+                                onChange={e => setFormData({ ...formData, division: e.target.value })}
+                            />
+                        </div>
                     </div>
 
                     <div className="pt-6">

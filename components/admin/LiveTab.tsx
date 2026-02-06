@@ -7,6 +7,7 @@ import { Play, CircleCheck as CheckCircle, Clock, TriangleAlert as AlertTriangle
 import { format, differenceInMinutes } from "date-fns";
 import { Timestamp } from "@/lib/firestore";
 import { EventConfig } from "@/types";
+import { calculateSchedule } from "@/lib/scheduler";
 
 export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig: EventConfig }) {
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -22,7 +23,7 @@ export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig
         const active = allRemaining.find(p => p.status === "Live") || allRemaining[0];
 
         setCurrentProgram(active || null);
-        setPrograms(allRemaining);
+        setPrograms(data); // Hold all data for stats
     };
 
     useEffect(() => {
@@ -52,33 +53,48 @@ export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig
 
         await updateProgram(currentProgram.programId, { status: "Completed" });
 
-        // Pull up logic: Update subsequent programs' start times
-        const remaining = programs.filter(p => p.programId !== currentProgram.programId);
-        if (remaining.length > 0) {
-            let nextStartTime = Date.now();
+        // Recalculate everything after change
+        const data = await getEventPrograms(eventId);
+        const newSchedule = calculateSchedule(data, eventConfig);
 
-            const updates = remaining.map((p) => {
-                const start = nextStartTime;
-                const durationMs = p.timeNeeded * 60 * 1000;
-                nextStartTime = start + durationMs;
-
-                return updateProgram(p.programId, {
-                    scheduledStartTime: Timestamp.fromMillis(start)
-                });
-            });
-            await Promise.all(updates);
-        }
-
+        const updates = newSchedule.map(p =>
+            updateProgram(p.programId, {
+                orderIndex: p.orderIndex,
+                scheduledStartTime: p.scheduledStartTime,
+                day: p.day
+            })
+        );
+        await Promise.all(updates);
         fetchState();
     };
 
     const handlePostpone = async () => {
         if (!currentProgram) return;
+
+        // Move to absolute end of global schedule
         const maxOrder = Math.max(...programs.map(p => p.orderIndex), 0);
+
+        // Postpone explicitly to the next day (max Day 3)
+        const targetDay = Math.min(Number(currentProgram.day || 1) + 1, 3);
+
         await updateProgram(currentProgram.programId, {
             orderIndex: maxOrder + 1,
-            status: "Pending"
+            day: targetDay as any,
+            status: "Pending" // Move back to pending queue
         });
+
+        // Global recalculation to sync all timings and respect the new day assignment
+        const data = await getEventPrograms(eventId);
+        const newSchedule = calculateSchedule(data, eventConfig);
+
+        const updates = newSchedule.map(p =>
+            updateProgram(p.programId, {
+                orderIndex: p.orderIndex,
+                scheduledStartTime: p.scheduledStartTime,
+                day: p.day
+            })
+        );
+        await Promise.all(updates);
         fetchState();
     };
 
@@ -98,14 +114,15 @@ export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig
                 : "bg-emerald-500/10 border-emerald-500/30"
                 }`}>
                 <div className="flex items-center gap-4">
-                    <div className="font-mono text-2xl font-bold tracking-widest">
-                        {format(currentTime, "HH:mm")}
+                    <div className="font-mono text-2xl font-bold tracking-widest text-white">
+                        {format(currentTime, "hh:mm a")}
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-bold ${delay > 0 ? "bg-red-500 text-white" : "bg-emerald-500 text-white"}`}>
-                        {delay > 0 ? `LATE: +${delay} min` : "ON TIME"}
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest ${delay > 0 ? "bg-rose-500 text-white" : "bg-emerald-500 text-white"}`}>
+                        {delay > 0 ? `LATE: +${delay} MIN` : "ON TIME"}
                     </div>
                 </div>
-                <div className="text-sm font-medium opacity-80 uppercase tracking-wider">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 flex items-center gap-2 text-white">
+                    <span className="bg-white/10 px-2 py-0.5 rounded border border-white/10">DAY {currentProgram.day}</span>
                     Live Control
                 </div>
             </div>
@@ -121,28 +138,38 @@ export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig
                                 {currentProgram.status === "Live" ? (
                                     <>
                                         <Play size={16} className="fill-indigo-300 animate-pulse" />
-                                        Running Now
+                                        Running Now (Started {format(currentProgram.scheduledStartTime.toDate(), "hh:mm a")})
                                     </>
                                 ) : (
                                     <>
                                         <Clock size={16} />
-                                        Ready to Start
+                                        Ready to Start (Scheduled {format(currentProgram.scheduledStartTime.toDate(), "hh:mm a")})
                                     </>
                                 )}
                             </div>
-                            <h2 className="text-4xl md:text-5xl font-bold text-white mb-2">{currentProgram.itemName}</h2>
-                            <p className="text-xl text-indigo-200">{currentProgram.category}</p>
+                            <h2 className="text-4xl md:text-5xl font-bold text-white mb-2">{String(currentProgram.itemName || "")}</h2>
+                            <div className="flex items-center gap-3">
+                                <p className="text-xl text-indigo-200 font-bold">{String(currentProgram.programClass || "General")}</p>
+                                {currentProgram.division && (
+                                    <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-lg text-sm font-bold">
+                                        {String(currentProgram.division)}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="text-right">
-                            <div className="text-4xl font-mono font-bold">{currentProgram.timeNeeded}<span className="text-lg text-muted-foreground">min</span></div>
+                            <div className="text-4xl font-mono font-bold">{Number(currentProgram.timeNeeded || 0)}<span className="text-lg text-muted-foreground">min</span></div>
                             <div className="text-sm text-muted-foreground">Duration</div>
                         </div>
                     </div>
 
                     <div className="mb-8">
                         <div className="p-4 rounded-xl bg-black/20 border border-white/10">
-                            <div className="text-sm text-muted-foreground mb-1">Participants</div>
-                            <div className="font-medium text-lg">{currentProgram.participants.join(", ")}</div>
+                            <div className="text-sm text-muted-foreground mb-1 flex justify-between">
+                                <span>Participants</span>
+                                <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">Day {currentProgram.day}</span>
+                            </div>
+                            <div className="font-medium text-lg">{Array.isArray(currentProgram.participants) ? currentProgram.participants.map(p => String(p)).join(", ") : String(currentProgram.participants || "")}</div>
                         </div>
                     </div>
 
@@ -173,21 +200,6 @@ export function LiveTab({ eventId, eventConfig }: { eventId: string; eventConfig
                         </button>
                     </div>
                 </div>
-            </div>
-
-            {/* Up Next Preview */}
-            <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-muted-foreground">Up Next</h3>
-                {programs.filter(p => p.programId !== currentProgram.programId).slice(0, 3).map((p, idx) => (
-                    <div key={p.programId} className="flex items-center gap-4 p-4 rounded-xl bg-card/50 border border-white/5 opacity-60">
-                        <span className="text-lg font-mono text-muted-foreground/50">+{idx + 1}</span>
-                        <div className="flex-1">
-                            <div className="font-medium">{p.itemName}</div>
-                            <div className="text-sm text-muted-foreground">{p.timeNeeded} mins</div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">{p.category}</div>
-                    </div>
-                ))}
             </div>
         </div>
     );

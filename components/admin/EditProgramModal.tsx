@@ -14,13 +14,15 @@ interface EditProgramModalProps {
 export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModalProps) {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
-        itemName: program.itemName,
-        participants: program.participants.join(", "),
-        timeNeeded: program.timeNeeded,
-        category: program.category || "General",
-        remarks: program.remarks || "",
-        materials: program.materials,
-        dressStatus: program.dressStatus,
+        itemName: String(program.itemName || ""),
+        participants: Array.isArray(program.participants) ? program.participants.map(p => String(p)).join(", ") : String(program.participants || ""),
+        timeNeeded: Number(program.timeNeeded || 5),
+        programClass: String(program.programClass || ""),
+        division: String(program.division || ""),
+        remarks: String(program.remarks || ""),
+        materials: String(program.materials || "Pending") as MaterialStatus,
+        dressStatus: String(program.dressStatus || "Pending") as DressStatus,
+        day: Number(program.day || 1),
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -29,6 +31,7 @@ export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModa
         try {
             await updateProgram(program.programId, {
                 ...formData,
+                day: formData.day as 1 | 2 | 3,
                 participants: formData.participants.split(",").map(p => p.trim()).filter(p => p !== "")
             });
             onUpdate();
@@ -68,24 +71,60 @@ export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModa
                                 />
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Duration (Minutes)</label>
-                                <input
-                                    required
-                                    type="number"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all"
-                                    value={formData.timeNeeded}
-                                    onChange={e => setFormData({ ...formData, timeNeeded: Number(e.target.value) })}
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Duration (Min)</label>
+                                    <input
+                                        required
+                                        type="number"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all"
+                                        value={formData.timeNeeded}
+                                        onChange={e => setFormData({ ...formData, timeNeeded: Number(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Assigned Day</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2, 3].map(d => (
+                                            <button
+                                                key={d}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, day: d })}
+                                                className={`flex-1 py-3 rounded-xl text-xs font-black border transition-all ${formData.day === d ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/20 hover:bg-white/10'}`}
+                                            >
+                                                D{d}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Participants (Comma Separated)</label>
                                 <textarea
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all min-h-[100px] resize-none text-sm leading-relaxed"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all min-h-[80px] resize-none text-sm leading-relaxed"
                                     value={formData.participants}
                                     onChange={e => setFormData({ ...formData, participants: e.target.value })}
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Class</label>
+                                    <input
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all font-medium"
+                                        value={formData.programClass}
+                                        onChange={e => setFormData({ ...formData, programClass: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Division</label>
+                                    <input
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500/50 transition-all font-medium"
+                                        value={formData.division}
+                                        onChange={e => setFormData({ ...formData, division: e.target.value })}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -106,7 +145,7 @@ export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModa
                                             key={status}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, materials: status as MaterialStatus })}
-                                            className={`py-2 rounded-xl text-xs font-semibold border transition-all ${formData.materials === status ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20' : 'bg-white/5 border-white/5 text-white/30 hover:bg-white/10'}`}
+                                            className={`py-2 rounded-xl text-xs font-semibold border transition-all ${formData.materials === status ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/30 hover:bg-white/10'}`}
                                         >
                                             {status}
                                         </button>
@@ -122,7 +161,7 @@ export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModa
                                             key={status}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, dressStatus: status as DressStatus })}
-                                            className={`py-2 rounded-xl text-xs font-semibold border transition-all ${formData.dressStatus === status ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20' : 'bg-white/5 border-white/5 text-white/30 hover:bg-white/10'}`}
+                                            className={`py-2 rounded-xl text-xs font-semibold border transition-all ${formData.dressStatus === status ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/30 hover:bg-white/10'}`}
                                         >
                                             {status}
                                         </button>
@@ -158,8 +197,8 @@ export function EditProgramModal({ program, onClose, onUpdate }: EditProgramModa
                             {loading ? <Loader2 className="animate-spin" size={20} /> : "Save Changes"}
                         </button>
                     </div>
-                </form>
-            </div>
-        </div>
+                </form >
+            </div >
+        </div >
     );
 }

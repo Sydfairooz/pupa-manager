@@ -3,6 +3,16 @@ import { collection, doc, setDoc, getDocs, query, where, Timestamp, orderBy, add
 export { Timestamp };
 import { Event, Program, FormSubmission, AdminPermission, PermissionLevel, MaterialStatus, DressStatus } from "@/types";
 
+const cleanObject = (obj: any) => {
+    const clean: any = {};
+    Object.keys(obj).forEach(key => {
+        if (obj[key] !== undefined) {
+            clean[key] = obj[key];
+        }
+    });
+    return clean;
+};
+
 export const createEvent = async (userId: string, userEmail: string, title: string) => {
     const eventRef = doc(collection(db, "events"));
     const eventData: Event = {
@@ -91,7 +101,8 @@ export const addProgram = async (eventId: string, data: Partial<Program>) => {
         dressStatus: (data.dressStatus as DressStatus) || "Pending",
         rating: data.rating || 0,
         remarks: data.remarks || "",
-        category: data.category || "General",
+        programClass: data.programClass || "General",
+        division: data.division || "",
         status: "Pending",
         scheduledStartTime: Timestamp.now(), // Planner will update this
         day: 1,
@@ -105,7 +116,7 @@ export const addProgram = async (eventId: string, data: Partial<Program>) => {
 
 export const updateProgram = async (programId: string, data: Partial<Program>) => {
     const ref = doc(db, "programs", programId);
-    await setDoc(ref, data, { merge: true });
+    await setDoc(ref, cleanObject(data), { merge: true });
 };
 
 export const deleteProgram = async (programId: string) => {
@@ -136,7 +147,8 @@ export const submitProgram = async (eventId: string, data: Partial<FormSubmissio
         itemName: data.itemName || "Untitled",
         participants: data.participants || [],
         timeNeeded: data.timeNeeded || 5,
-        category: data.category || "General",
+        programClass: data.programClass || "General",
+        division: data.division || "",
         remarks: data.remarks || "",
         contactEmail: data.contactEmail || "",
         contactPhone: data.contactPhone || "",
@@ -210,5 +222,5 @@ export const updateAdminPermission = async (eventId: string, userId: string, per
 
 export const updateEventConfig = async (eventId: string, config: Partial<Event["config"]>) => {
     const eventRef = doc(db, "events", eventId);
-    await updateDoc(eventRef, { config });
+    await updateDoc(eventRef, { config: cleanObject(config) });
 };

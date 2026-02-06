@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getEventPrograms, updateProgram } from "@/lib/firestore";
+import { getEventPrograms, updateProgram, addProgram } from "@/lib/firestore";
 import { Program, EventConfig } from "@/types";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Loader2, GripVertical, AlertCircle, Download, Settings, Clock, Sparkles } from "lucide-react";
+import { Loader2, GripVertical, AlertCircle, Download, Settings, Clock, Sparkles, User } from "lucide-react";
 import { format } from "date-fns";
 import { Timestamp } from "@/lib/firestore";
-import { exportToExcel } from "@/lib/excelExport";
+import { importFromExcel, downloadTemplate } from "@/lib/excelExport";
 import { ScheduleConfigModal } from "./ScheduleConfigModal";
+import { calculateSchedule } from "@/lib/scheduler";
 
 export function ScheduleTab({ eventId, eventConfig: initialConfig }: { eventId: string; eventConfig: EventConfig }) {
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -29,48 +30,6 @@ export function ScheduleTab({ eventId, eventConfig: initialConfig }: { eventId: 
         fetchPrograms();
     }, [eventId, config]);
 
-    const calculateSchedule = (items: Program[], currentConfig: EventConfig) => {
-        let dayIndex = 1;
-        let dayStartTime = currentConfig.startTime.toMillis();
-        let dayEndTime = currentConfig.endTime.toMillis();
-        let currentTime = dayStartTime;
-
-        const breakTime = currentConfig.breakStartTime?.toMillis();
-        const breakDur = (currentConfig.breakDuration || 0) * 60 * 1000;
-        let breakApplied = false;
-
-        return items.map((item, index) => {
-            const durationMs = item.timeNeeded * 60 * 1000;
-
-            // Apply break if we've passed the breakStartTime
-            if (breakTime && !breakApplied && currentTime >= breakTime) {
-                currentTime += breakDur;
-                breakApplied = true;
-            }
-
-            // If the item doesn't fit in the current day, move it to the next day's start time
-            if (currentTime + durationMs > dayEndTime) {
-                dayIndex++;
-                const dayOffset = 24 * 60 * 60 * 1000;
-                dayStartTime += dayOffset;
-                dayEndTime += dayOffset;
-                currentTime = dayStartTime;
-            }
-
-            const start = currentTime;
-            const scheduledStartTime = Timestamp.fromMillis(start);
-
-            // Set next item's start time - consecutive timing
-            currentTime = start + durationMs;
-
-            return {
-                ...item,
-                orderIndex: index,
-                scheduledStartTime,
-                day: dayIndex as any
-            };
-        });
-    };
 
     const onDragEnd = async (result: DropResult) => {
         if (!result.destination) return;
@@ -93,24 +52,40 @@ export function ScheduleTab({ eventId, eventConfig: initialConfig }: { eventId: 
         await Promise.all(updates);
     };
 
-    const handleExportSchedule = async () => {
-        const exportData = programs.map((p, idx) => ({
-            "S.No": idx + 1,
-            "Item Name": p.itemName,
-            "Participants": p.participants.join(", "),
-            "Scheduled Time": format(p.scheduledStartTime.toDate(), "h:mm a").toUpperCase(),
-            "Day": `Day ${p.day}`
-        }));
+    const handleImportSchedule = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-        const columns = [
-            { header: "S.No", key: "S.No", width: 10 },
-            { header: "Item Name", key: "Item Name", width: 30 },
-            { header: "Participants", key: "Participants", width: 40 },
-            { header: "Scheduled Time", key: "Scheduled Time", width: 20 },
-            { header: "Day", key: "Day", width: 15 }
-        ];
+        setLoading(true);
+        try {
+            const data = await importFromExcel(file);
 
-        await exportToExcel(exportData, columns, `${eventId}_Schedule.xlsx`, "Schedule");
+            if (data.length === 0) {
+                alert("No valid items found. Please ensure you have an 'Item Name' or 'Program' column.");
+                return;
+            }
+
+            let addedCount = 0;
+            for (const item of data) {
+                await addProgram(eventId, {
+                    ...item,
+                    materials: "Pending",
+                    dressStatus: "Pending"
+                });
+                addedCount++;
+            }
+
+            if (addedCount > 0) {
+                await fetchPrograms(); // Refresh the list
+                alert(`Successfully imported ${addedCount} items.`);
+            }
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || "Failed to import schedule. Please check the file format.");
+        } finally {
+            setLoading(false);
+            if (e.target) e.target.value = ""; // Reset input
+        }
     };
 
     return (
@@ -144,100 +119,143 @@ export function ScheduleTab({ eventId, eventConfig: initialConfig }: { eventId: 
                 </div>
 
                 <div className="flex flex-col gap-4">
-                    <button
-                        onClick={handleExportSchedule}
-                        className="flex-1 flex items-center justify-center gap-3 p-6 bg-white/[0.03] border border-white/10 rounded-[2rem] hover:bg-white/[0.06] transition-all group"
-                    >
+                    <label className="flex-1 flex items-center justify-center gap-3 p-6 bg-white/[0.03] border border-white/10 rounded-[2rem] hover:bg-white/[0.06] transition-all group cursor-pointer">
+                        <input
+                            type="file"
+                            accept=".xlsx, .xls"
+                            className="hidden"
+                            onChange={handleImportSchedule}
+                        />
                         <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-2xl group-hover:bg-indigo-500 group-hover:text-white transition-all">
-                            <Download size={24} />
+                            <Download size={24} className="rotate-180" />
                         </div>
                         <div className="text-left">
-                            <div className="font-bold">Export XLSX</div>
-                            <div className="text-xs text-muted-foreground">Download full schedule</div>
+                            <div className="font-bold">Import XLSX</div>
+                            <div className="text-xs text-muted-foreground">Upload schedule data</div>
+                        </div>
+                    </label>
+                    <button
+                        onClick={() => downloadTemplate()}
+                        className="flex items-center gap-4 p-4 bg-white/[0.03] border border-white/10 rounded-[2rem] hover:bg-white/[0.06] transition-all group"
+                    >
+                        <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                            <Download size={18} />
+                        </div>
+                        <div className="text-left">
+                            <div className="text-sm font-bold">Sample Template</div>
+                            <div className="text-[10px] text-muted-foreground">Download example file</div>
                         </div>
                     </button>
-                    <div className="p-6 bg-emerald-500/5 border border-emerald-500/10 rounded-[2rem] flex items-center gap-4">
-                        <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl">
-                            <AlertCircle size={24} />
+                    <div className="p-6 bg-white/[0.03] border border-white/10 rounded-[2rem] grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Global Items</div>
+                            <div className="text-2xl font-black text-white">{programs.length}</div>
                         </div>
-                        <div>
-                            <div className="font-bold text-emerald-400">{programs.length} Items</div>
-                            <div className="text-xs text-emerald-500/60">Auto-scheduled with {config.breakDuration}m breaks</div>
+                        <div className="space-y-1">
+                            <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Total Duration</div>
+                            <div className="text-2xl font-black text-emerald-400">
+                                {programs.reduce((acc, p) => acc + (p.timeNeeded || 0), 0)} <span className="text-xs text-emerald-500/50">min</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Draggable List */}
-            <div className="space-y-4">
+            {/* Draggable List Grouped by Day */}
+            <div className="space-y-6">
                 <DragDropContext onDragEnd={onDragEnd}>
                     <Droppable droppableId="schedule-list">
                         {(provided) => (
                             <div
                                 {...provided.droppableProps}
                                 ref={provided.innerRef}
-                                className="space-y-4"
+                                className="grid grid-cols-1 xl:grid-cols-3 gap-8"
                             >
-                                {programs.map((item, index) => (
-                                    <Draggable key={item.programId} draggableId={item.programId} index={index}>
-                                        {(provided, snapshot) => (
-                                            <div
-                                                ref={provided.innerRef}
-                                                {...provided.draggableProps}
-                                                className={`group relative flex items-center gap-6 p-6 rounded-3xl border transition-all duration-300 ${snapshot.isDragging
-                                                    ? "bg-indigo-600/20 border-indigo-500 shadow-2xl scale-[1.02] z-50 backdrop-blur-xl"
-                                                    : "bg-card border-white/5 hover:border-white/10 hover:bg-white/[0.02]"
-                                                    }`}
-                                            >
-                                                <div {...provided.dragHandleProps} className="text-white/10 group-hover:text-white/40 transition-colors">
-                                                    <GripVertical size={24} />
-                                                </div>
+                                {[1, 2, 3].map((day) => {
+                                    const dayItems = programs.filter(p => p.day === day);
+                                    const totalTime = dayItems.reduce((acc, p) => acc + (p.timeNeeded || 0), 0);
 
-                                                <div className="flex flex-col items-center justify-center min-w-[100px] py-2 px-4 bg-white/5 border border-white/5 rounded-2xl shadow-inner">
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-indigo-400/60 mb-0.5">Start</div>
-                                                    <div className="text-lg font-mono font-bold">
-                                                        {format(item.scheduledStartTime.toDate(), "hh:mm")}
+                                    return (
+                                        <div key={day} className="flex flex-col space-y-4 bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-6 lg:min-h-[600px]">
+                                            <div className="flex items-center justify-between px-2 mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-black text-white shadow-lg shadow-indigo-600/20">
+                                                        {day}
                                                     </div>
-                                                    <div className="text-[8px] font-bold text-white/30 uppercase">{format(item.scheduledStartTime.toDate(), "a")}</div>
+                                                    <h3 className="font-black text-white uppercase tracking-widest text-xs">Day {day}</h3>
                                                 </div>
-
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-3 mb-1">
-                                                        <h4 className="text-lg font-bold truncate group-hover:text-indigo-400 transition-colors uppercase tracking-tight">
-                                                            {item.itemName}
-                                                        </h4>
-                                                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/40">
-                                                            {item.category || "General"}
-                                                        </span>
-                                                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                                                            DAY {item.day}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
-                                                        <div className="flex items-center gap-1.5 ring-1 ring-white/10 bg-white/5 px-2 py-1 rounded-lg">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
-                                                            {item.timeNeeded} MINS
-                                                        </div>
-                                                        <div className="truncate max-w-[300px] uppercase tracking-wider opacity-60 font-bold text-[10px]">
-                                                            {item.participants.join(" • ")}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="hidden md:flex items-center gap-3">
-                                                    <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${item.materials === 'Delivered' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-white/5 text-white/20 border-white/5'
-                                                        }`}>
-                                                        Mat: {item.materials}
-                                                    </div>
-                                                    <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${item.dressStatus === 'Delivered' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-white/5 text-white/20 border-white/5'
-                                                        }`}>
-                                                        Dress: {item.dressStatus}
-                                                    </div>
+                                                <div className="text-[10px] font-bold text-white/20 uppercase tracking-tighter">
+                                                    {totalTime} mins • {dayItems.length} Items
                                                 </div>
                                             </div>
-                                        )}
-                                    </Draggable>
-                                ))}
+
+                                            <div className="space-y-4">
+                                                {programs.map((item, index) => {
+                                                    if (item.day !== day) return null;
+                                                    return (
+                                                        <Draggable key={item.programId} draggableId={item.programId} index={index}>
+                                                            {(provided, snapshot) => (
+                                                                <div
+                                                                    ref={provided.innerRef}
+                                                                    {...provided.draggableProps}
+                                                                    className={`group relative flex flex-col p-5 rounded-3xl border transition-all duration-300 ${snapshot.isDragging
+                                                                        ? "bg-indigo-600/30 border-indigo-500 shadow-2xl scale-[1.05] z-50 backdrop-blur-xl"
+                                                                        : "bg-card border-white/5 hover:border-white/10 hover:bg-white/[0.03]"
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex justify-between items-start gap-4 mb-3">
+                                                                        <div {...provided.dragHandleProps} className="shrink-0 text-white/5 group-hover:text-white/20 transition-colors">
+                                                                            <GripVertical size={20} />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <h4 className="font-black text-sm text-white/90 truncate uppercase tracking-tight group-hover:text-indigo-400 transition-colors">
+                                                                                {String(item.itemName || "")}
+                                                                            </h4>
+                                                                            <div className="flex items-center gap-2 mt-1">
+                                                                                <span className="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 uppercase tracking-widest">
+                                                                                    {String(item.programClass || "General")}
+                                                                                </span>
+                                                                                <div className="text-[9px] font-bold text-white/20">
+                                                                                    ({item.timeNeeded}M)
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="shrink-0 text-right">
+                                                                            <div className="text-[11px] font-mono font-black text-indigo-300 whitespace-nowrap">
+                                                                                {format(item.scheduledStartTime.toDate(), "hh:mm a")}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-between mt-auto pt-3 border-t border-white/5">
+                                                                        <div className="flex gap-1">
+                                                                            {[1, 2, 3].map(d => (
+                                                                                <button
+                                                                                    key={d}
+                                                                                    onClick={async () => {
+                                                                                        await updateProgram(item.programId, { day: d as 1 | 2 | 3 });
+                                                                                        fetchPrograms();
+                                                                                    }}
+                                                                                    className={`w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-black border transition-all ${item.day === d ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-white/5 border-white/5 text-white/20 hover:bg-white/10'}`}
+                                                                                >
+                                                                                    D{d}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                        <div className="flex gap-1.5">
+                                                                            <div className={`w-1.5 h-1.5 rounded-full ${String(item.materials) === 'Delivered' ? 'bg-emerald-500' : 'bg-white/10'}`} title="Materials" />
+                                                                            <div className={`w-1.5 h-1.5 rounded-full ${String(item.dressStatus) === 'Delivered' ? 'bg-blue-500' : 'bg-white/10'}`} title="Dress" />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </Draggable>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                                 {provided.placeholder}
                             </div>
                         )}

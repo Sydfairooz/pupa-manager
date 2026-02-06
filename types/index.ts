@@ -4,9 +4,9 @@ export interface EventConfig {
     startTime: Timestamp;
     endTime: Timestamp;
     breakDuration: number;
-    breakStartTime?: Timestamp;
+    breakStartTime?: Timestamp | null;
     maxAdmins: number;
-    scheduleDate?: Timestamp; // Date for the event
+    scheduleDate?: Timestamp | null;
 }
 
 export type PermissionLevel = "view" | "edit" | "manage";
@@ -46,10 +46,11 @@ export interface Program {
     dressStatus: DressStatus;
     rating: number; // 1-5
     remarks: string;
-    category: string;
+    programClass: string;
+    division: string;
     status: "Pending" | "Live" | "Completed" | "Postponed";
     scheduledStartTime: Timestamp;
-    day: 1 | 2;
+    day: 1 | 2 | 3;
     orderIndex: number;
 }
 
@@ -59,7 +60,8 @@ export interface FormSubmission {
     itemName: string;
     participants: string[];
     timeNeeded: number;
-    category: string;
+    programClass: string;
+    division: string;
     remarks: string;
     contactEmail?: string;
     contactPhone?: string;
